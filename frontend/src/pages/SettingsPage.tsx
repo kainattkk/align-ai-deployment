@@ -39,11 +39,12 @@ export default function SettingsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.detail || 'Failed to fetch integration status');
       setGoogleStatus(data.google || { connected: false, email: '', updated_at: null });
-    } catch (err: any) {
-      if (err.message === 'Failed to fetch') {
+    } catch (err) {
+      const error = err as Error;
+      if (error.message === 'Failed to fetch') {
         setGoogleError('Cannot connect to server. Ensure your backend is running.');
       } else {
-        setGoogleError(err.message || 'Failed to fetch integration status');
+        setGoogleError(error.message || 'Failed to fetch integration status');
       }
     }
   };
@@ -78,8 +79,8 @@ export default function SettingsPage() {
       if (data?.auth_url) {
         window.location.href = data.auth_url;
       }
-    } catch (err: any) {
-      setGoogleError(err.message || 'Failed to connect Google');
+    } catch (err) {
+      setGoogleError(err instanceof Error ? err.message : 'Failed to connect Google');
     } finally {
       setGoogleLoading(false);
     }
@@ -99,8 +100,8 @@ export default function SettingsPage() {
       if (data?.ok) {
         setGoogleStatus({ connected: false, email: '', updated_at: new Date().toISOString() });
       }
-    } catch (err: any) {
-      setGoogleError(err.message || 'Failed to disconnect Google');
+    } catch (err) {
+      setGoogleError(err instanceof Error ? err.message : 'Failed to disconnect Google');
     } finally {
       setGoogleLoading(false);
     }
@@ -119,7 +120,7 @@ export default function SettingsPage() {
 
   const handleSaveChanges = async () => {
     try {
-      const payload: any = { username, notifications };
+      const payload: Record<string, unknown> = { username, notifications };
       if (newPassword || currentPassword) {
         if (newPassword !== confirmPassword) {
           alert("New passwords do not match.");
