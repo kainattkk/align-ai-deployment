@@ -1,4 +1,5 @@
 import express from "express";
+import mongoose from "mongoose";
 import { getAccountAndAccessToken, getRequestedUserEmail } from "../services/googleService.js";
 import CalendarEvent from "../models/CalendarEvent.js";
 
@@ -191,6 +192,63 @@ router.post("/events", (req, res) => {
     });
   };
   handler().catch((err) => res.status(400).json({ detail: String(err.message || err) }));
+});
+
+router.delete("/events/:eventId", (req, res) => {
+  const run = async () => {
+    const userEmail = getRequestedUserEmail(req);
+    if (!userEmail) {
+      return res.status(401).json({ detail: "Sign in required" });
+    }
+    const eventId = decodeURIComponent(String(req.params.eventId || "")).trim();
+    if (!eventId) {
+      return res.status(400).json({ detail: "Missing event id" });
+    }
+
+    const deleteGoogleEvent = async (googleEventId) => {
+      const gid = String(googleEventId || "").trim();
+      if (!gid) return;
+      try {
+        const { accessToken } = await getAccountAndAccessToken(userEmail);
+        const r = await fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(gid)}`,
+          { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (!r.ok && r.status !== 404) {
+          const text = await r.text();
+          throw new Error(text || `Google Calendar delete failed (${r.status})`);
+        }
+      } catch (e) {
+        throw new Error(String(e.message || e));
+      }
+    };
+
+    let doc = null;
+    if (mongoose.Types.ObjectId.isValid(eventId)) {
+      doc = await CalendarEvent.findOne({ userEmail, _id: eventId });
+    }
+    if (!doc) {
+      doc = await CalendarEvent.findOne({ userEmail, googleEventId: eventId });
+    }
+
+    if (doc) {
+      try {
+        await deleteGoogleEvent(doc.googleEventId);
+      } catch (e) {
+        return res.status(400).json({ detail: String(e.message || e) });
+      }
+      await CalendarEvent.deleteOne({ _id: doc._id });
+      return res.json({ ok: true });
+    }
+
+    try {
+      await deleteGoogleEvent(eventId);
+    } catch (e) {
+      return res.status(400).json({ detail: String(e.message || e) });
+    }
+    return res.json({ ok: true });
+  };
+  run().catch((err) => res.status(400).json({ detail: String(err.message || err) }));
 });
 
 export default router;

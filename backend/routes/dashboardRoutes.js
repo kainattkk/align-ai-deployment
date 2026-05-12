@@ -25,6 +25,19 @@ const googleEventOnLocalDay = (item, dayStart, dayEnd) => {
   return false;
 };
 
+const dedupeTodayTaskRows = (rows) => {
+  const sorted = [...rows].sort((a, b) => a.sortMs - b.sortMs);
+  const seen = new Set();
+  const out = [];
+  for (const row of sorted) {
+    const key = `${String(row.title || "").toLowerCase().trim()}|${Math.floor(row.sortMs / 60000)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+};
+
 const router = express.Router();
 
 router.get("/summary", (req, res) => {
@@ -79,7 +92,7 @@ router.get("/summary", (req, res) => {
       Task.find({ userEmail: scopedEmail, due_date: { $gte: startOfDay, $lte: in7Days }, completed: false }).sort({ due_date: 1 }).limit(5),
     ]);
 
-    const localTodayTaskRows = [
+    const localTodayTaskRows = dedupeTodayTaskRows([
       ...todaySchedules.map((item) => ({
         title: String(item.title || "Scheduled event"),
         time: new Date(item.start_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
@@ -92,7 +105,7 @@ router.get("/summary", (req, res) => {
         priority: "medium",
         sortMs: new Date(item.start_at).getTime(),
       })),
-    ].sort((a, b) => a.sortMs - b.sortMs);
+    ]);
 
     const localTodayTasks = localTodayTaskRows.map(({ sortMs, ...rest }) => rest);
 
@@ -169,23 +182,27 @@ router.get("/summary", (req, res) => {
 
       const meetingsToday = meetings.filter((item) => googleEventOnLocalDay(item, startOfDay, endOfDay));
 
-      const googleTodayTaskRows = meetingsToday.map((item) => {
-        const sortMs = item.start?.dateTime
-          ? new Date(item.start.dateTime).getTime()
-          : startOfDay.getTime();
-        return {
-          title: String(item.summary || "Scheduled event"),
-          time: item.start?.dateTime
-            ? new Date(item.start.dateTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-            : "All day",
-          priority: "medium",
-          sortMs,
-        };
-      });
+      const linkedGoogleIds = new Set(
+        todayCalendarEvents.map((c) => String(c.googleEventId || "").trim()).filter(Boolean)
+      );
 
-      const mergedTodayTaskRows = [...localTodayTaskRows, ...googleTodayTaskRows]
-        .sort((a, b) => a.sortMs - b.sortMs)
-        .slice(0, 12);
+      const googleTodayTaskRows = meetingsToday
+        .filter((item) => item.id && !linkedGoogleIds.has(String(item.id)))
+        .map((item) => {
+          const sortMs = item.start?.dateTime
+            ? new Date(item.start.dateTime).getTime()
+            : startOfDay.getTime();
+          return {
+            title: String(item.summary || "Scheduled event"),
+            time: item.start?.dateTime
+              ? new Date(item.start.dateTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+              : "All day",
+            priority: "medium",
+            sortMs,
+          };
+        });
+
+      const mergedTodayTaskRows = dedupeTodayTaskRows([...localTodayTaskRows, ...googleTodayTaskRows]).slice(0, 12);
 
       const todayTasks = mergedTodayTaskRows.map(({ sortMs, ...t }) => t);
 

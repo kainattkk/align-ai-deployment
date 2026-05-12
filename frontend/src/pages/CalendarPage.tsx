@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Clock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Clock, Trash2 } from 'lucide-react';
 import { apiUrl } from '../lib/api';
 import { useAuth } from '../app/context/AuthContext';
 import GoogleIntegrationIndicator from '../components/GoogleIntegrationIndicator';
 
 interface Event {
   id: string;
+  googleEventId?: string;
+  source?: string;
   title: string;
   date: string;
   category: 'meeting' | 'assignment' | 'personal';
@@ -51,6 +53,8 @@ export default function CalendarPage() {
         const start = new Date(item.start_at || item.start?.dateTime || item.start?.date || new Date().toISOString());
         return {
           id: String(item.id || `event-${index}`),
+          googleEventId: String(item.googleEventId || ''),
+          source: String(item.source || ''),
           title: String(item.title || item.summary || 'Event'),
           date: start.toISOString(),
           category: (item.category === 'assignment' || item.category === 'personal' || item.category === 'meeting')
@@ -108,20 +112,7 @@ export default function CalendarPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.detail || 'Failed to create event');
 
-      const created = data.schedule;
-      const start = new Date(created.start_at);
-      setEvents((prev) => [
-        ...prev,
-        {
-          id: String(created.id),
-          title: String(created.title || formTitle),
-          date: start.toISOString(),
-          category: (created.category === 'assignment' || created.category === 'personal' || created.category === 'meeting')
-            ? created.category
-            : formCategory,
-          time: start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        },
-      ]);
+      await fetchEvents();
       setIsAddingEvent(false);
       setFormTitle('');
       setFormCategory('meeting');
@@ -131,6 +122,26 @@ export default function CalendarPage() {
       setFormLocation('');
     } catch (err: any) {
       setError(err.message || 'Failed to create event');
+    }
+  };
+
+  const deleteEvent = async (event: Event) => {
+    if (!user?.email) {
+      setError('Sign in to remove events.');
+      return;
+    }
+    setError('');
+    try {
+      const res = await fetch(apiUrl(`/calendar/events/${encodeURIComponent(event.id)}`), {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || 'Failed to delete event');
+      await fetchEvents();
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete event');
     }
   };
 
@@ -314,14 +325,24 @@ export default function CalendarPage() {
                   return (
                 <div
                   key={event.id}
-                  className={`p-3 rounded-xl border-l-4 ${accent.border} ${accent.bg} hover:bg-card transition-all cursor-pointer`}
+                  className={`p-3 rounded-xl border-l-4 ${accent.border} ${accent.bg} hover:bg-card transition-all`}
                 >
                   <div className="flex items-start gap-3">
-                    <div className={`w-2 h-2 rounded-full ${getCategoryColor(event.category)} mt-2`}></div>
-                    <div className="flex-1">
+                    <div className={`w-2 h-2 rounded-full ${getCategoryColor(event.category)} mt-2 shrink-0`}></div>
+                    <div className="flex-1 min-w-0">
                       <p className="font-medium text-foreground text-sm">{event.title}</p>
                       <p className="text-xs text-muted-foreground mt-1">{new Date(event.date).toLocaleDateString()} • {event.time}</p>
                     </div>
+                    {user?.email && (
+                      <button
+                        type="button"
+                        onClick={() => void deleteEvent(event)}
+                        className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        aria-label="Remove event"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
                   );
@@ -351,13 +372,22 @@ export default function CalendarPage() {
                       className={`p-3 rounded-xl border-l-4 ${accent.border} ${accent.bg} border border-border`}
                     >
                       <div className="flex items-start gap-2">
-                        <div className={`w-2 h-2 rounded-full ${getCategoryColor(event.category)} mt-2`}></div>
-                        <div className="flex-1">
+                        <div className={`w-2 h-2 rounded-full ${getCategoryColor(event.category)} mt-2 shrink-0`}></div>
+                        <div className="flex-1 min-w-0">
                           <p className="font-medium text-foreground text-sm">{event.title}</p>
                           <p className="text-xs text-muted-foreground mt-1">{event.time}</p>
                         </div>
+                        {user?.email && (
+                          <button
+                            type="button"
+                            onClick={() => void deleteEvent(event)}
+                            className="shrink-0 p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                            aria-label="Remove event"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">{event.time}</p>
                     </div>
                       );
                     })()
