@@ -20,7 +20,8 @@ const getRedirectUri = (override) => {
   if (process.env.GOOGLE_REDIRECT_URL_NODE) {
     return process.env.GOOGLE_REDIRECT_URL_NODE;
   }
-  const backendOrigin = process.env.BACKEND_ORIGIN || "http://localhost:5000";
+  const backendOrigin =
+    process.env.BACKEND_ORIGIN || "https://align-ai-deployment.onrender.com";
   return `${backendOrigin}/api/auth/google/callback`; // ← fixed
 };
 

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Loader2 } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { useAuth } from '../app/context/AuthContext';
+import { apiUrl } from '../lib/api';
 
 interface Message {
   id: number;
@@ -60,7 +61,7 @@ export default function AvailabilityManagerPage() {
       const currentDate = new Date().toLocaleString();
       const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-      const response = await fetch('http://localhost:5000/api/assistant/availability/chat', {
+      const response = await fetch(apiUrl('/assistant/availability/chat'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

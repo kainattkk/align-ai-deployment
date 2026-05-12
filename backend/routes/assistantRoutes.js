@@ -3,6 +3,13 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const router = express.Router();
 
+function internalApiUrl(path) {
+  const origin =
+    process.env.BACKEND_ORIGIN || `http://127.0.0.1:${process.env.PORT || 5000}`;
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return `${origin}${p}`;
+}
+
 let genAI;
 
 const tools = [
@@ -61,9 +68,12 @@ router.post("/availability/chat", async (req, res) => {
         const fromAt = now.toISOString();
         const toAt = nextWeek.toISOString();
         
-        const eventsRes = await fetch(`http://localhost:5000/api/calendar/events?from_at=${fromAt}&to_at=${toAt}`, {
-          headers: { "x-user-email": userEmail }
-        });
+        const eventsRes = await fetch(
+          internalApiUrl(`/api/calendar/events?from_at=${fromAt}&to_at=${toAt}`),
+          {
+            headers: { "x-user-email": userEmail },
+          }
+        );
         
         if (eventsRes.ok) {
           const eventsData = await eventsRes.json();
@@ -136,7 +146,7 @@ ${scheduleContext}
 
       try {
         if (functionName === "create_calendar_event") {
-          const internalRes = await fetch("http://localhost:5000/api/calendar/events", {
+          const internalRes = await fetch(internalApiUrl("/api/calendar/events"), {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -151,7 +161,7 @@ ${scheduleContext}
             functionResult = { error: `Failed to schedule event: ${data.detail}` };
           }
         } else if (functionName === "create_task") {
-          const internalRes = await fetch("http://localhost:5000/api/tasks", {
+          const internalRes = await fetch(internalApiUrl("/api/tasks"), {
             method: "POST",
             headers: {
               "Content-Type": "application/json",

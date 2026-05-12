@@ -38,7 +38,8 @@ router.get("/google/connect", async (req, res) => {
 });
 
 router.get("/google/callback", async (req, res) => {
-  const frontendOrigin = process.env.FRONTEND_ORIGIN || "http://localhost:5173";
+  const frontendOrigin =
+    process.env.FRONTEND_ORIGIN || "https://align-ai-deployment.vercel.app";
   try {
     const code = String(req.query.code || "");
     const state = String(req.query.state || "");

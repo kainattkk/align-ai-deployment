@@ -9,7 +9,8 @@ import { buildGoogleAuthUrl, exchangeCodeForTokens, fetchGoogleUserProfile } fro
 const router = express.Router();
 
 const getAuthRedirectUri = () => {
-  const backendOrigin = process.env.BACKEND_ORIGIN || "http://localhost:5000";
+  const backendOrigin =
+    process.env.BACKEND_ORIGIN || "https://align-ai-deployment.onrender.com";
   return `${backendOrigin}/api/auth/google/callback`;
 };
 
@@ -19,7 +20,8 @@ router.get("/google/start", async (req, res) => {
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
     return res.status(500).json({ detail: "Google OAuth not configured on server" });
   }
-  const frontendOrigin = process.env.FRONTEND_ORIGIN || "http://localhost:5173";
+  const frontendOrigin =
+    process.env.FRONTEND_ORIGIN || "https://align-ai-deployment.vercel.app";
   const next = String(req.query?.next || "/dashboard");
   const state = Buffer.from(JSON.stringify({ next, t: Date.now(), nonce: crypto.randomUUID() }), "utf8").toString("base64url");
   const authUrl = buildGoogleAuthUrl({ state, redirectUri: getAuthRedirectUri() });
@@ -27,7 +29,8 @@ router.get("/google/start", async (req, res) => {
 });
 
 router.get("/google/callback", async (req, res) => {
-  const frontendOrigin = process.env.FRONTEND_ORIGIN || "http://localhost:5173";
+  const frontendOrigin =
+    process.env.FRONTEND_ORIGIN || "https://align-ai-deployment.vercel.app";
   try {
     const code = String(req.query.code || "");
     const state = String(req.query.state || "");
