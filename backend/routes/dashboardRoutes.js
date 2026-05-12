@@ -5,6 +5,26 @@ import Task from "../models/Task.js";
 import Schedule from "../models/Schedule.js";
 import CalendarEvent from "../models/CalendarEvent.js";
 
+/** YYYY-MM-DD in local timezone */
+const localDateKey = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+/** Whether a Google Calendar list item starts or occurs on this local calendar day */
+const googleEventOnLocalDay = (item, dayStart, dayEnd) => {
+  if (item?.start?.dateTime) {
+    const t = new Date(item.start.dateTime);
+    return t.getTime() >= dayStart.getTime() && t.getTime() < dayEnd.getTime();
+  }
+  if (item?.start?.date) {
+    return String(item.start.date) === localDateKey(dayStart);
+  }
+  return false;
+};
+
 const router = express.Router();
 
 router.get("/summary", (req, res) => {
@@ -59,18 +79,22 @@ router.get("/summary", (req, res) => {
       Task.find({ userEmail: scopedEmail, due_date: { $gte: startOfDay, $lte: in7Days }, completed: false }).sort({ due_date: 1 }).limit(5),
     ]);
 
-    const localTodayTasks = [
+    const localTodayTaskRows = [
       ...todaySchedules.map((item) => ({
         title: String(item.title || "Scheduled event"),
         time: new Date(item.start_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         priority: "medium",
+        sortMs: new Date(item.start_at).getTime(),
       })),
       ...todayCalendarEvents.map((item) => ({
         title: String(item.title || "Calendar event"),
         time: new Date(item.start_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         priority: "medium",
+        sortMs: new Date(item.start_at).getTime(),
       })),
-    ].slice(0, 4);
+    ].sort((a, b) => a.sortMs - b.sortMs);
+
+    const localTodayTasks = localTodayTaskRows.map(({ sortMs, ...rest }) => rest);
 
     const localDeadlines = upcomingTasks.map((task) => {
       const dueDate = new Date(task.due_date);
@@ -123,7 +147,9 @@ router.get("/summary", (req, res) => {
         fetch(
           `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(
             startOfDay.toISOString()
-          )}&singleEvents=true&orderBy=startTime&maxResults=20`,
+          )}&timeMax=${encodeURIComponent(
+            endOfDay.toISOString()
+          )}&singleEvents=true&orderBy=startTime&maxResults=50`,
           {
             headers: { Authorization: `Bearer ${accessToken}` },
           }
@@ -141,11 +167,27 @@ router.get("/summary", (req, res) => {
       const meetings = Array.isArray(calendar.items) ? calendar.items : [];
       const coursesList = Array.isArray(courses.courses) ? courses.courses : [];
 
-      const todayTasks = meetings.slice(0, 3).map((item) => ({
-        title: String(item.summary || "Scheduled event"),
-        time: item.start?.dateTime ? new Date(item.start.dateTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "All day",
-        priority: "medium",
-      }));
+      const meetingsToday = meetings.filter((item) => googleEventOnLocalDay(item, startOfDay, endOfDay));
+
+      const googleTodayTaskRows = meetingsToday.map((item) => {
+        const sortMs = item.start?.dateTime
+          ? new Date(item.start.dateTime).getTime()
+          : startOfDay.getTime();
+        return {
+          title: String(item.summary || "Scheduled event"),
+          time: item.start?.dateTime
+            ? new Date(item.start.dateTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+            : "All day",
+          priority: "medium",
+          sortMs,
+        };
+      });
+
+      const mergedTodayTaskRows = [...localTodayTaskRows, ...googleTodayTaskRows]
+        .sort((a, b) => a.sortMs - b.sortMs)
+        .slice(0, 12);
+
+      const todayTasks = mergedTodayTaskRows.map(({ sortMs, ...t }) => t);
 
       const upcomingDeadlines = coursesList.slice(0, 3).map((course, index) => ({
         title: `Coursework check-in: ${String(course.name || "Classroom")}`,
@@ -156,22 +198,24 @@ router.get("/summary", (req, res) => {
 
       const pendingAssignments = Math.max(coursesList.length, localPayload.metrics.pendingAssignments);
       const productivityScore = Math.min(
-        100, 
-        40 + Math.round((emailCount * 0.5) + (meetings.length * 3) + (coursesList.length * 1) + (Math.max(0, 10 - pendingAssignments) * 2))
+        100,
+        40 + Math.round((emailCount * 0.5) + (todayTasks.length * 3) + (coursesList.length * 1) + (Math.max(0, 10 - pendingAssignments) * 2))
       );
 
       return res.json({
         metrics: {
           emailsToday: emailCount,
           pendingAssignments: Math.max(coursesList.length, localPayload.metrics.pendingAssignments),
-          scheduledMeetings: Math.max(meetings.length, localPayload.metrics.scheduledMeetings),
+          scheduledMeetings: Math.max(todayTasks.length, localPayload.metrics.scheduledMeetings),
           productivityScore,
         },
         todayTasks: todayTasks.length ? todayTasks : localPayload.todayTasks,
         upcomingDeadlines: upcomingDeadlines.length ? upcomingDeadlines : localPayload.upcomingDeadlines,
         aiSuggestions: [
           emailCount > 0 ? `You have ${emailCount} recent emails to triage.` : "No new emails today.",
-          meetings.length > 0 ? `You have ${meetings.length} upcoming calendar events.` : "No meetings found for today.",
+          todayTasks.length > 0
+            ? `You have ${todayTasks.length} calendar item${todayTasks.length === 1 ? "" : "s"} scheduled for today.`
+            : "No calendar events scheduled for today.",
           coursesList.length > 0 ? `Classroom has ${coursesList.length} active courses.` : localPayload.aiSuggestions[0],
         ],
       });
