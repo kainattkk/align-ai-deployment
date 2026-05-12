@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { apiUrl } from '../../lib/api';
 
@@ -36,60 +36,82 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const persistSession = (nextToken: string, nextUser: { name: string; email: string }) => {
+  const persistSession = useCallback((nextToken: string, nextUser: { name: string; email: string }) => {
     setToken(nextToken);
     setUser(nextUser);
     setIsAuthenticated(true);
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ token: nextToken, user: nextUser }));
-  };
+  }, []);
 
-  const login = async (email: string, password: string) => {
-    const res = await fetch(apiUrl('/auth/login'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.msg || 'Login failed');
-    persistSession(String(data.token || ''), { name: data.name || email.split('@')[0], email });
-  };
+  const login = useCallback(
+    async (email: string, password: string) => {
+      const res = await fetch(apiUrl('/auth/login'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.msg || 'Login failed');
+      persistSession(String(data.token || ''), { name: data.name || email.split('@')[0], email });
+    },
+    [persistSession]
+  );
 
-  const signup = async (username: string, email: string, password: string) => {
-    const res = await fetch(apiUrl('/auth/register'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: username, email, password }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.msg || 'Signup failed');
-    persistSession(String(data.token || ''), { name: data.name || username, email: data.email || email });
-  };
+  const signup = useCallback(
+    async (username: string, email: string, password: string) => {
+      const res = await fetch(apiUrl('/auth/register'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: username, email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.msg || 'Signup failed');
+      persistSession(String(data.token || ''), { name: data.name || username, email: data.email || email });
+    },
+    [persistSession]
+  );
 
-  const completeOAuth = (payload: { token: string; name: string; email: string }) => {
-    persistSession(payload.token, { name: payload.name, email: payload.email });
-  };
+  const completeOAuth = useCallback(
+    (payload: { token: string; name: string; email: string }) => {
+      persistSession(payload.token, { name: payload.name, email: payload.email });
+    },
+    [persistSession]
+  );
 
-  const updateUser = (updates: { name?: string; email?: string }) => {
-    if (!user) return;
-    const nextUser = { ...user, ...updates };
-    setUser(nextUser);
-    if (token) {
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ token, user: nextUser }));
-    }
-  };
+  const updateUser = useCallback(
+    (updates: { name?: string; email?: string }) => {
+      if (!user) return;
+      const nextUser = { ...user, ...updates };
+      setUser(nextUser);
+      if (token) {
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ token, user: nextUser }));
+      }
+    },
+    [user, token]
+  );
 
-  const logout = () => {
+  const logout = useCallback(() => {
     setIsAuthenticated(false);
     setUser(null);
     setToken(null);
     localStorage.removeItem(AUTH_STORAGE_KEY);
-  };
+  }, []);
 
-  return (
-    <AuthContext.Provider value={{ isAuthenticated, user, token, login, signup, completeOAuth, updateUser, logout }}>
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({
+      isAuthenticated,
+      user,
+      token,
+      login,
+      signup,
+      completeOAuth,
+      updateUser,
+      logout,
+    }),
+    [isAuthenticated, user, token, login, signup, completeOAuth, updateUser, logout]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

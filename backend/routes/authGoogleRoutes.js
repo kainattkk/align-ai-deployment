@@ -4,17 +4,24 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import ExternalAccount from "../models/ExternalAccount.js";
-import { buildGoogleAuthUrl, exchangeCodeForTokens, fetchGoogleUserProfile } from "../services/googleService.js";
+import {
+  buildGoogleAuthUrl,
+  exchangeCodeForTokens,
+  fetchGoogleUserProfile,
+  resolveGoogleOAuthRedirectUri,
+} from "../services/googleService.js";
 
 const router = express.Router();
 
-const getAuthRedirectUri = () => {
-  const backendOrigin =
-    process.env.BACKEND_ORIGIN || "https://align-ai-deployment.onrender.com";
-  return `${backendOrigin}/api/auth/google/callback`;
-};
+const getAuthRedirectUri = () => resolveGoogleOAuthRedirectUri();
 
-const createToken = (userId) => jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: "7d" });
+const createToken = (userId) => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error("JWT_SECRET is not configured");
+  }
+  return jwt.sign({ id: userId }, secret, { expiresIn: "7d" });
+};
 
 router.get("/google/start", async (req, res) => {
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
@@ -32,10 +39,25 @@ router.get("/google/callback", async (req, res) => {
   const frontendOrigin =
     process.env.FRONTEND_ORIGIN || "https://align-ai-deployment.vercel.app";
   try {
+    const googleErr = String(req.query.error || "");
+    if (googleErr) {
+      console.error(
+        "[Google OAuth login] Google returned error:",
+        googleErr,
+        req.query.error_description || ""
+      );
+      return res.redirect(`${frontendOrigin}/login?google=error&reason=denied`);
+    }
+
     const code = String(req.query.code || "");
     const state = String(req.query.state || "");
     if (!code || !state) {
-      return res.redirect(`${frontendOrigin}/login?google=error`);
+      return res.redirect(`${frontendOrigin}/login?google=error&reason=missing`);
+    }
+
+    if (!process.env.JWT_SECRET) {
+      console.error("[Google OAuth login] JWT_SECRET is missing; set it in Render environment variables.");
+      return res.redirect(`${frontendOrigin}/login?google=error&reason=config`);
     }
 
     const parsed = JSON.parse(Buffer.from(state, "base64url").toString("utf8"));
@@ -78,8 +100,14 @@ router.get("/google/callback", async (req, res) => {
     redirectUrl.searchParams.set("name", user.name || providerName);
     redirectUrl.searchParams.set("next", next);
     return res.redirect(redirectUrl.toString());
-  } catch (_err) {
-    return res.redirect(`${frontendOrigin}/login?google=error`);
+  } catch (err) {
+    const msg = String(err?.message || err || "unknown");
+    console.error("[Google OAuth login callback]", msg);
+    const reason =
+      /redirect_uri|invalid_grant|Malformed|oauth/i.test(msg) ? "oauth" : "server";
+    return res.redirect(
+      `${frontendOrigin}/login?google=error&reason=${reason}`
+    );
   }
 });
 

@@ -1,10 +1,20 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Brain, Sparkles, Mail, Lock } from 'lucide-react';
 import { useAuth } from '../app/context/AuthContext';
 import { Input } from '../components/ui/input';
 import { Checkbox } from '../components/ui/checkbox';
 import { apiUrl } from '../lib/api';
+
+const GOOGLE_OAUTH_ERROR_HINTS: Record<string, string> = {
+  config:
+    'Server configuration: set JWT_SECRET on Render (Environment). Also set GOOGLE_CALLBACK_URL to exactly the redirect URI registered in Google Cloud.',
+  oauth:
+    'Google rejected the callback. In Google Cloud → Credentials → your OAuth client, add this Authorized redirect URI exactly: https://align-ai-deployment.onrender.com/api/auth/google/callback — and set the same value as GOOGLE_CALLBACK_URL on Render if you use that variable.',
+  denied: 'Google sign-in was cancelled.',
+  missing: 'Sign-in did not return a valid code. Please try again.',
+  server: 'Sign-in failed on the server. Open Render logs and look for [Google OAuth login callback].',
+};
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -14,6 +24,17 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    if (searchParams.get('google') !== 'error') return;
+    const reason = searchParams.get('reason') || 'server';
+    setError(GOOGLE_OAUTH_ERROR_HINTS[reason] ?? GOOGLE_OAUTH_ERROR_HINTS.server);
+    const next = new URLSearchParams(searchParams);
+    next.delete('google');
+    next.delete('reason');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

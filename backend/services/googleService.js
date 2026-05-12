@@ -15,15 +15,23 @@ export const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/classroom.coursework.me.readonly",
 ];
 
-const getRedirectUri = (override) => {
-  if (override) return override;
-  if (process.env.GOOGLE_REDIRECT_URL_NODE) {
-    return process.env.GOOGLE_REDIRECT_URL_NODE;
-  }
-  const backendOrigin =
-    process.env.BACKEND_ORIGIN || "https://align-ai-deployment.onrender.com";
-  return `${backendOrigin}/api/auth/google/callback`; // ← fixed
+/**
+ * Must match exactly one "Authorized redirect URI" in Google Cloud Console.
+ * Prefer GOOGLE_CALLBACK_URL on the server (full URL) so it always matches Console.
+ */
+export const resolveGoogleOAuthRedirectUri = (explicitOverride) => {
+  if (explicitOverride) return explicitOverride;
+  const fromEnv =
+    (process.env.GOOGLE_CALLBACK_URL && process.env.GOOGLE_CALLBACK_URL.trim()) ||
+    (process.env.GOOGLE_REDIRECT_URL_NODE && process.env.GOOGLE_REDIRECT_URL_NODE.trim());
+  if (fromEnv) return fromEnv;
+  const backendOrigin = (
+    process.env.BACKEND_ORIGIN || "https://align-ai-deployment.onrender.com"
+  ).replace(/\/$/, "");
+  return `${backendOrigin}/api/auth/google/callback`;
 };
+
+const getRedirectUri = (override) => resolveGoogleOAuthRedirectUri(override);
 
 const parseJsonSafe = async (response) => {
   try {

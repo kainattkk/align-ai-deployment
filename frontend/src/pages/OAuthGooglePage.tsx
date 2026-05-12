@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useAuth } from '../app/context/AuthContext';
+
+function safeNextPath(raw: string) {
+  if (!raw.startsWith('/') || raw.startsWith('//')) return '/dashboard';
+  return raw;
+}
 
 export default function OAuthGooglePage() {
   const [searchParams] = useSearchParams();
@@ -21,8 +27,18 @@ export default function OAuthGooglePage() {
       setError('Google sign-in failed. Please try again.');
       return;
     }
-    completeOAuth({ token: payload.token, email: payload.email, name: payload.name || payload.email.split('@')[0] });
-    navigate(payload.next || '/dashboard', { replace: true });
+    try {
+      flushSync(() => {
+        completeOAuth({
+          token: payload.token,
+          email: payload.email,
+          name: payload.name || payload.email.split('@')[0],
+        });
+      });
+      navigate(safeNextPath(payload.next), { replace: true });
+    } catch {
+      setError('Google sign-in failed. Please try again.');
+    }
   }, [completeOAuth, navigate, payload.email, payload.name, payload.next, payload.token]);
 
   return (
