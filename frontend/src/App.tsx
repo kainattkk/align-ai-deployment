@@ -33,7 +33,7 @@ function AppRoutes() {
       <Route path="/" element={<PublicRoute><LandingPage /></PublicRoute>} />
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/signup" element={<PublicRoute><SignUpPage /></PublicRoute>} />
-      <Route path="/oauth/google" element={<PublicRoute><OAuthGooglePage /></PublicRoute>} />
+      <Route path="/oauth/google" element={<OAuthGooglePage />} />
 
       {/* Protected Routes */}
       <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
