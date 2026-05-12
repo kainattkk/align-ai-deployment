@@ -78,13 +78,13 @@ export default function CalendarPage() {
       return d.getFullYear() === currentDate.getFullYear() && d.getMonth() === currentDate.getMonth() && d.getDate() === date;
     });
 
-  const upcomingEvents = useMemo(
-    () =>
-      [...events]
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-        .slice(0, 5),
-    [events]
-  );
+  const upcomingEvents = useMemo(() => {
+    const now = Date.now();
+    return [...events]
+      .filter((e) => new Date(e.date).getTime() >= now)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .slice(0, 5);
+  }, [events]);
 
   const submitEvent = async () => {
     if (!formTitle.trim() || !formDate || !formTime) return;
@@ -327,6 +327,9 @@ export default function CalendarPage() {
                   );
                 })()
               ))}
+              {!loading && upcomingEvents.length === 0 && (
+                <p className="text-sm text-muted-foreground">No upcoming events from today onward in this month.</p>
+              )}
               {loading && <p className="text-sm text-muted-foreground">Loading events...</p>}
             </div>
           </div>
