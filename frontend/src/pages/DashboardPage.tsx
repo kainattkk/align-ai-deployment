@@ -132,23 +132,36 @@ export default function DashboardPage() {
             <Clock className="w-5 h-5 text-primary" />
             <h2 className="text-xl font-bold text-foreground">Today's Tasks</h2>
           </div>
-          <div className="space-y-4">
-            {todayTasks.map((task, index) => (
-              <div
-                key={index}
-                className="flex items-start gap-3 p-3 rounded-xl hover:bg-muted transition-all cursor-pointer"
-              >
-                <div className={`mt-1 w-2 h-2 rounded-full ${
-                  task.priority === 'high' ? 'bg-destructive' :
-                  task.priority === 'medium' ? 'bg-secondary-warn' : 'bg-primary/80'
-                }`}></div>
-                <div className="flex-1">
-                  <p className="font-medium text-foreground">{task.title}</p>
-                  <p className="text-sm text-muted-foreground">{task.time}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+          <ul role="list" className="space-y-3">
+            {todayTasks.map((task, index) => {
+              const bar =
+                task.priority === 'high'
+                  ? 'bg-destructive'
+                  : task.priority === 'medium'
+                    ? 'bg-secondary-warn'
+                    : 'bg-primary';
+              return (
+                <li
+                  key={`${task.title}-${index}`}
+                  className="flex overflow-hidden rounded-xl border border-border bg-muted/15"
+                >
+                  <div className={`w-1 shrink-0 ${bar}`} aria-hidden />
+                  <div className="flex flex-1 items-start gap-3 p-3 min-w-0">
+                    <span
+                      className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary ring-1 ring-primary/25"
+                      aria-hidden
+                    >
+                      {index + 1}
+                    </span>
+                    <div className="flex-1 min-w-0 pt-0.5">
+                      <p className="font-medium text-foreground leading-snug">{task.title}</p>
+                      <p className="text-sm text-muted-foreground mt-0.5">{task.time}</p>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         </div>
 
         {/* Upcoming Deadlines */}
